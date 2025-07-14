@@ -6,7 +6,7 @@
   "scripts": {
     "start": "serve -s .",
     "dev": "serve -s . -p 3000",
-    "build": "echo 'Static site, no build needed'",
+    "build": "node -e \"const fs = require('fs'); if (!fs.existsSync('public')) fs.mkdirSync('public'); fs.copyFileSync('index.html', 'public/index.html'); fs.copyFileSync('boat.svg', 'public/boat.svg');\"",
     "test": "echo 'No tests specified'"
   },
   "keywords": [
