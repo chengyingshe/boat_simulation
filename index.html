@@ -430,10 +430,28 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pathfinding/0.4.18/pathfinding-browser.min.js"></script>
     <script>
+        // 调试：检查元素和库是否正确加载
+        console.log('页面加载开始');
+        console.log('PathFinding库:', typeof PF !== 'undefined' ? '已加载' : '未加载');
+        
         const canvas = document.getElementById('simulationCanvas');
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
+        console.log('Canvas元素:', canvas);
+        
+        if (!canvas) {
+            console.error('Canvas元素未找到！');
+        }
+        
+        const ctx = canvas ? canvas.getContext('2d') : null;
+        console.log('Canvas上下文:', ctx);
+        
+        if (!ctx) {
+            console.error('无法获取Canvas 2D上下文！');
+        }
+        
+        const width = canvas ? canvas.width : 0;
+        const height = canvas ? canvas.height : 0;
+        console.log('Canvas尺寸:', width, 'x', height);
+        
         const gridSize = 20;
         const numCols = Math.floor(width / gridSize);
         const numRows = Math.floor(height / gridSize);
@@ -556,7 +574,7 @@
         let isDragging = false;
         let startX, startY;
         let dragPreview = null;
-        const grid = new PF.Grid(numCols, numRows);
+        let grid = null;
         
         // SVG船只数据
         let boatSvg = null;
@@ -861,12 +879,23 @@
 
         // 动画循环
         function animate() {
+            if (!ctx || !canvas) {
+                console.error('Canvas上下文丢失，停止动画');
+                return;
+            }
+            
             // 清空画布
             ctx.clearRect(0, 0, width, height);
             
             // 绘制水面背景
             ctx.fillStyle = '#4a90e2';
             ctx.fillRect(0, 0, width, height);
+            
+            // 测试绘制 - 添加一个白色圆圈确保绘制正常工作
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(50, 50, 10, 0, 2 * Math.PI);
+            ctx.fill();
             
             // 绘制网格（调试用，可选）
             // ctx.strokeStyle = 'rgba(255,255,255,0.1)';
@@ -920,7 +949,7 @@
                 ctx.fillText('目标', destination.x, destination.y - 15);
             }
 
-            // 绘制小船
+            // 绘制小船 - 始终绘制，不管SVG是否加载
             if (boatImage) {
                 drawBoat(ctx, boat.x, boat.y, boat.angle, 0.8);
             } else {
@@ -941,6 +970,12 @@
                 ctx.stroke();
                 ctx.restore();
             }
+            
+            // 测试绘制 - 在船只位置绘制一个小圆圈确保坐标正确
+            ctx.fillStyle = 'yellow';
+            ctx.beginPath();
+            ctx.arc(boat.x, boat.y, 3, 0, 2 * Math.PI);
+            ctx.fill();
 
             // 绘制路径
             if (boat.path.length > 0) {
@@ -1016,9 +1051,38 @@
             requestAnimationFrame(animate);
         }
 
-        // 初始化SVG船只并启动动画
-        initBoatSvg();
-        animate();
+        // 确保PathFinding库加载完成后再初始化
+        function startSimulation() {
+            console.log('开始初始化仿真程序');
+            
+            if (typeof PF === 'undefined') {
+                console.log('PathFinding库未加载，等待中...');
+                setTimeout(startSimulation, 100);
+                return;
+            }
+            
+            if (!canvas || !ctx) {
+                console.error('Canvas未正确初始化');
+                return;
+            }
+            
+            // 初始化网格
+            grid = new PF.Grid(numCols, numRows);
+            console.log('网格已初始化:', numCols, 'x', numRows);
+            
+            console.log('所有组件已准备就绪，启动仿真');
+            
+            // 初始化SVG船只并启动动画
+            initBoatSvg();
+            animate();
+        }
+        
+        // 页面加载完成后开始
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startSimulation);
+        } else {
+            startSimulation();
+        }
     </script>
 </body>
 </html> 
