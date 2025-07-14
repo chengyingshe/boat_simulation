@@ -213,8 +213,8 @@ const canvasSize = {        // 画布尺寸
 
 如有问题或建议，请通过以下方式联系：
 
-- 提交Issue：[GitHub Issues](https://github.com/username/boat-simulation/issues)
-- 邮箱：developer@example.com
+- 提交Issue：[GitHub Issues](https://github.com/chengyingshe/boat_simulation/issues)
+- 邮箱：maximeshe@163.com
 
 ---
 
