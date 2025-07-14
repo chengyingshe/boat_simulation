@@ -1,0 +1,35 @@
+{
+  "name": "boat-simulation",
+  "version": "1.0.0",
+  "description": "小船自主导航仿真程序 - 基于HTML5 Canvas和PathFinding.js的Web前端应用",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve -s .",
+    "dev": "serve -s . -p 3000",
+    "build": "echo 'Static site, no build needed'",
+    "test": "echo 'No tests specified'"
+  },
+  "keywords": [
+    "boat",
+    "navigation",
+    "simulation", 
+    "pathfinding",
+    "canvas",
+    "lidar",
+    "autonomous"
+  ],
+  "author": "Developer",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "serve": "^14.2.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/username/boat-simulation.git"
+  },
+  "homepage": "https://boat-simulation.vercel.app"
+} 

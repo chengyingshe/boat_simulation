@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小船自主导航仿真</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 10px; 
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 820px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        canvas { 
+            border: 2px solid #333; 
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 15px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .status.ready {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.navigating {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status.completed {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align: center; color: #333;">小船自主导航仿真</h1>
+        <canvas id="simulationCanvas" width="800" height="600"></canvas>
+        <div class="controls">
+            <button id="startButton">开始自主导航</button>
+            <button id="resetButton">重置仿真</button>
+            <button id="clearObstaclesButton">清除障碍物</button>
+        </div>
+        <div id="status" class="status ready">就绪 - 请添加障碍物并设置终点</div>
+        <div class="instructions">
+            <h3>使用说明：</h3>
+            <ul>
+                <li><strong>添加障碍物：</strong>按住鼠标左键拖拽创建矩形障碍物</li>
+                <li><strong>设置终点：</strong>右键点击画布设置绿色终点标记</li>
+                <li><strong>开始导航：</strong>点击"开始自主导航"按钮启动小船</li>
+                <li><strong>激光雷达：</strong>白色圆圈表示检测范围（100像素）</li>
+                <li><strong>路径显示：</strong>黄色线条显示规划路径</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pathfinding/0.4.18/pathfinding-browser.min.js"></script>
+    <script>
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const gridSize = 20;
+        const numCols = Math.floor(width / gridSize);
+        const numRows = Math.floor(height / gridSize);
+        const lidarRange = 100;
+
+        // 状态管理
+        const statusElement = document.getElementById('status');
+        const startButton = document.getElementById('startButton');
+        const resetButton = document.getElementById('resetButton');
+        const clearObstaclesButton = document.getElementById('clearObstaclesButton');
+
+        // 障碍物类
+        class Obstacle {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+            }
+
+            contains(pointX, pointY) {
+                return pointX >= this.x && pointX <= this.x + this.width &&
+                       pointY >= this.y && pointY <= this.y + this.height;
+            }
+
+            getOccupiedCells() {
+                const cells = [];
+                const startCol = Math.floor(this.x / gridSize);
+                const endCol = Math.floor((this.x + this.width) / gridSize);
+                const startRow = Math.floor(this.y / gridSize);
+                const endRow = Math.floor((this.y + this.height) / gridSize);
+                
+                for (let row = startRow; row <= endRow; row++) {
+                    for (let col = startCol; col <= endCol; col++) {
+                        if (row >= 0 && row < numRows && col >= 0 && col < numCols) {
+                            cells.push({col, row});
+                        }
+                    }
+                }
+                return cells;
+            }
+
+            intersectsWithBoat(boatX, boatY, boatRadius = 15) {
+                const closestX = Math.max(this.x, Math.min(boatX, this.x + this.width));
+                const closestY = Math.max(this.y, Math.min(boatY, this.y + this.height));
+                const distance = Math.sqrt(Math.pow(boatX - closestX, 2) + Math.pow(boatY - closestY, 2));
+                return distance < boatRadius;
+            }
+        }
+
+        // 小船类
+        class Boat {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.angle = 0;
+                this.speed = 2;
+                this.path = [];
+                this.gridPath = [];
+                this.isNavigating = false;
+                this.hasReachedDestination = false;
+            }
+
+            move() {
+                if (this.path.length > 0 && this.isNavigating) {
+                    const nextPoint = this.path[0];
+                    const dx = nextPoint.x - this.x;
+                    const dy = nextPoint.y - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < this.speed) {
+                        this.x = nextPoint.x;
+                        this.y = nextPoint.y;
+                        this.path.shift();
+                        this.gridPath.shift();
+                    } else {
+                        const angle = Math.atan2(dy, dx);
+                        this.x += this.speed * Math.cos(angle);
+                        this.y += this.speed * Math.sin(angle);
+                        this.angle = angle;
+                    }
+                } else if (this.isNavigating && this.path.length === 0) {
+                    this.isNavigating = false;
+                    this.hasReachedDestination = true;
+                    updateStatus('completed', '导航完成 - 小船已到达目标位置！');
+                }
+            }
+
+            detectObstacles(allObstacles) {
+                const detected = [];
+                for (const obst of allObstacles) {
+                    // 计算障碍物中心点与小船的距离
+                    const obstCenterX = obst.x + obst.width / 2;
+                    const obstCenterY = obst.y + obst.height / 2;
+                    const dist = Math.hypot(obstCenterX - this.x, obstCenterY - this.y);
+                    
+                    if (dist <= lidarRange) {
+                        detected.push(obst);
+                    }
+                }
+                return detected;
+            }
+
+            reset(x = 100, y = 100) {
+                this.x = x;
+                this.y = y;
+                this.angle = 0;
+                this.path = [];
+                this.gridPath = [];
+                this.isNavigating = false;
+                this.hasReachedDestination = false;
+            }
+        }
+
+        // 全局变量
+        let allObstacles = [];
+        let knownObstacles = [];
+        let destination = null;
+        let boat = new Boat(100, 100);
+        let isDragging = false;
+        let startX, startY;
+        let dragPreview = null;
+        const grid = new PF.Grid(numCols, numRows);
+
+        // 坐标转换函数
+        function worldToGrid(x, y) {
+            return {
+                col: Math.floor(x / gridSize), 
+                row: Math.floor(y / gridSize)
+            };
+        }
+
+        function gridToWorld(col, row) {
+            return {
+                x: col * gridSize + gridSize / 2, 
+                y: row * gridSize + gridSize / 2
+            };
+        }
+
+        // 更新网格
+        function updateGrid(grid, knownObstacles) {
+            // 重置所有格子为可走
+            for (let row = 0; row < numRows; row++) {
+                for (let col = 0; col < numCols; col++) {
+                    grid.setWalkableAt(col, row, true);
+                }
+            }
+            
+            // 设置已知障碍物为不可走
+            for (const obst of knownObstacles) {
+                const cells = obst.getOccupiedCells();
+                for (const cell of cells) {
+                    if (cell.col >= 0 && cell.col < numCols && cell.row >= 0 && cell.row < numRows) {
+                        grid.setWalkableAt(cell.col, cell.row, false);
+                    }
+                }
+            }
+        }
+
+        // 路径规划
+        function planPath(boat, destination, grid, knownObstacles) {
+            updateGrid(grid, knownObstacles);
+            const start = worldToGrid(boat.x, boat.y);
+            const end = worldToGrid(destination.x, destination.y);
+            
+            // 确保起点和终点在网格范围内
+            if (start.col < 0 || start.col >= numCols || start.row < 0 || start.row >= numRows ||
+                end.col < 0 || end.col >= numCols || end.row < 0 || end.row >= numRows) {
+                return {gridPath: [], worldPath: []};
+            }
+            
+            const finder = new PF.AStarFinder();
+            const gridPath = finder.findPath(start.col, start.row, end.col, end.row, grid.clone());
+            const worldPath = gridPath.map(p => gridToWorld(p[0], p[1]));
+            
+            return {gridPath, worldPath};
+        }
+
+        // 状态更新
+        function updateStatus(type, message) {
+            statusElement.className = `status ${type}`;
+            statusElement.textContent = message;
+        }
+
+        // 鼠标事件处理
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            if (e.button === 0) { // 左键 - 开始拖拽障碍物
+                isDragging = true;
+                startX = mouseX;
+                startY = mouseY;
+                dragPreview = {x: startX, y: startY, width: 0, height: 0};
+            } else if (e.button === 2) { // 右键 - 设置终点
+                destination = {x: mouseX, y: mouseY};
+                boat.hasReachedDestination = false;
+                updateStatus('ready', '终点已设置 - 点击开始导航');
+                e.preventDefault();
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const width = mouseX - startX;
+                const height = mouseY - startY;
+                dragPreview = {
+                    x: width > 0 ? startX : startX + width,
+                    y: height > 0 ? startY : startY + height,
+                    width: Math.abs(width),
+                    height: Math.abs(height)
+                };
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const width = mouseX - startX;
+                const height = mouseY - startY;
+                const obstWidth = Math.abs(width);
+                const obstHeight = Math.abs(height);
+                
+                // 只创建有意义大小的障碍物
+                if (obstWidth > 10 && obstHeight > 10) {
+                    const obstX = width > 0 ? startX : startX + width;
+                    const obstY = height > 0 ? startY : startY + height;
+                    allObstacles.push(new Obstacle(obstX, obstY, obstWidth, obstHeight));
+                    updateStatus('ready', '障碍物已添加');
+                }
+                
+                dragPreview = null;
+            }
+        });
+
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // 按钮事件处理
+        startButton.addEventListener('click', () => {
+            if (destination && !boat.isNavigating) {
+                boat.isNavigating = true;
+                boat.hasReachedDestination = false;
+                knownObstacles = boat.detectObstacles(allObstacles);
+                
+                const plan = planPath(boat, destination, grid, knownObstacles);
+                boat.gridPath = plan.gridPath;
+                boat.path = plan.worldPath;
+                
+                if (boat.path.length > 0) {
+                    updateStatus('navigating', '正在导航 - 小船正在前往目标位置');
+                } else {
+                    updateStatus('ready', '无法到达目标 - 请检查路径是否被阻挡');
+                    boat.isNavigating = false;
+                }
+            }
+        });
+
+        resetButton.addEventListener('click', () => {
+            boat.reset();
+            destination = null;
+            allObstacles = [];
+            knownObstacles = [];
+            updateStatus('ready', '仿真已重置 - 请添加障碍物并设置终点');
+        });
+
+        clearObstaclesButton.addEventListener('click', () => {
+            allObstacles = [];
+            knownObstacles = [];
+            if (boat.isNavigating) {
+                boat.isNavigating = false;
+                boat.path = [];
+                boat.gridPath = [];
+            }
+            updateStatus('ready', '障碍物已清除');
+        });
+
+        // 动画循环
+        function animate() {
+            // 清空画布
+            ctx.clearRect(0, 0, width, height);
+            
+            // 绘制水面背景
+            ctx.fillStyle = '#4a90e2';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 绘制网格（调试用，可选）
+            // ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            // ctx.lineWidth = 1;
+            // for (let i = 0; i <= numCols; i++) {
+            //     ctx.beginPath();
+            //     ctx.moveTo(i * gridSize, 0);
+            //     ctx.lineTo(i * gridSize, height);
+            //     ctx.stroke();
+            // }
+            // for (let i = 0; i <= numRows; i++) {
+            //     ctx.beginPath();
+            //     ctx.moveTo(0, i * gridSize);
+            //     ctx.lineTo(width, i * gridSize);
+            //     ctx.stroke();
+            // }
+
+            // 绘制所有障碍物
+            ctx.fillStyle = '#666';
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            for (const obst of allObstacles) {
+                ctx.fillRect(obst.x, obst.y, obst.width, obst.height);
+                ctx.strokeRect(obst.x, obst.y, obst.width, obst.height);
+            }
+
+            // 绘制拖拽预览
+            if (dragPreview && dragPreview.width > 0 && dragPreview.height > 0) {
+                ctx.fillStyle = 'rgba(102, 102, 102, 0.5)';
+                ctx.strokeStyle = '#333';
+                ctx.setLineDash([5, 5]);
+                ctx.fillRect(dragPreview.x, dragPreview.y, dragPreview.width, dragPreview.height);
+                ctx.strokeRect(dragPreview.x, dragPreview.y, dragPreview.width, dragPreview.height);
+                ctx.setLineDash([]);
+            }
+
+            // 绘制终点
+            if (destination) {
+                ctx.fillStyle = '#28a745';
+                ctx.beginPath();
+                ctx.arc(destination.x, destination.y, 8, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = '#155724';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // 绘制终点标记
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('目标', destination.x, destination.y - 15);
+            }
+
+            // 绘制小船
+            ctx.fillStyle = '#dc3545';
+            ctx.strokeStyle = '#721c24';
+            ctx.lineWidth = 2;
+            ctx.save();
+            ctx.translate(boat.x, boat.y);
+            ctx.rotate(boat.angle);
+            ctx.beginPath();
+            ctx.moveTo(15, 0);
+            ctx.lineTo(-10, 8);
+            ctx.lineTo(-5, 0);
+            ctx.lineTo(-10, -8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // 绘制路径
+            if (boat.path.length > 0) {
+                ctx.strokeStyle = '#ffc107';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(boat.x, boat.y);
+                for (const p of boat.path) {
+                    ctx.lineTo(p.x, p.y);
+                }
+                ctx.stroke();
+                
+                // 绘制路径点
+                ctx.fillStyle = '#ffc107';
+                for (const p of boat.path) {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+
+            // 绘制激光雷达范围
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.arc(boat.x, boat.y, lidarRange, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 绘制检测到的障碍物高亮
+            if (boat.isNavigating) {
+                const detected = boat.detectObstacles(allObstacles);
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.lineWidth = 3;
+                for (const obst of detected) {
+                    ctx.strokeRect(obst.x - 2, obst.y - 2, obst.width + 4, obst.height + 4);
+                }
+            }
+
+            // 导航逻辑
+            if (boat.isNavigating) {
+                const detected = boat.detectObstacles(allObstacles);
+                const newKnown = detected.filter(obst => !knownObstacles.includes(obst));
+                
+                if (newKnown.length > 0) {
+                    knownObstacles = knownObstacles.concat(newKnown);
+                    updateGrid(grid, knownObstacles);
+                    
+                    // 检查当前路径是否被新障碍物阻挡
+                    const pathBlocked = boat.gridPath.some(p => {
+                        if (p[1] < numRows && p[0] < numCols) {
+                            return !grid.nodes[p[1] * numCols + p[0]].walkable;
+                        }
+                        return false;
+                    });
+                    
+                    if (pathBlocked) {
+                        const plan = planPath(boat, destination, grid, knownObstacles);
+                        boat.gridPath = plan.gridPath;
+                        boat.path = plan.worldPath;
+                        
+                        if (boat.path.length === 0) {
+                            boat.isNavigating = false;
+                            updateStatus('ready', '路径被阻挡 - 无法到达目标位置');
+                        }
+                    }
+                }
+                
+                boat.move();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // 启动动画
+        animate();
+    </script>
+</body>
+</html> 
