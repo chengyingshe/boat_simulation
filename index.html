@@ -5,102 +5,426 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>小船自主导航仿真</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body { 
-            margin: 0; 
-            padding: 10px; 
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-        }
-        .container {
-            max-width: 820px;
-            margin: 0 auto;
-            background: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        canvas { 
-            border: 2px solid #333; 
-            display: block;
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+            animation: slideIn 0.6s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%);
+            padding: 30px 20px;
+            text-align: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 2px,
+                rgba(255,255,255,0.1) 2px,
+                rgba(255,255,255,0.1) 4px
+            );
+            animation: float 20s linear infinite;
+        }
+        
+        @keyframes float {
+            0% { transform: translateX(-100px) translateY(-100px); }
+            100% { transform: translateX(100px) translateY(100px); }
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .main-content {
+            padding: 30px;
+        }
+        
+        .canvas-container {
+            position: relative;
+            display: inline-block;
             margin: 0 auto;
-            cursor: crosshair;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: #000;
         }
+        
+        canvas { 
+            display: block;
+            cursor: crosshair;
+            transition: transform 0.2s ease;
+        }
+        
+        canvas:hover {
+            transform: scale(1.01);
+        }
+        
         .controls {
             text-align: center;
-            margin-top: 15px;
+            margin: 25px 0;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
         }
+        
         button {
-            background: #007bff;
+            background: linear-gradient(45deg, #ff6b6b, #ffa500);
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 12px 25px;
             font-size: 16px;
-            border-radius: 5px;
+            font-weight: 600;
+            border-radius: 50px;
             cursor: pointer;
-            margin: 0 5px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+            position: relative;
+            overflow: hidden;
         }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s;
+        }
+        
+        button:hover::before {
+            left: 100%;
+        }
+        
         button:hover {
-            background: #0056b3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
         }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
         button:disabled {
-            background: #6c757d;
+            background: linear-gradient(45deg, #6c757d, #868e96);
             cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
         }
-        .instructions {
-            margin-top: 15px;
-            padding: 15px;
-            background: #e9ecef;
-            border-radius: 5px;
-            font-size: 14px;
+        
+        #startButton {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
         }
-        .instructions h3 {
-            margin-top: 0;
-            color: #333;
+        
+        #startButton:hover {
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.6);
         }
-        .instructions ul {
-            margin: 0;
-            padding-left: 20px;
+        
+        #resetButton {
+            background: linear-gradient(45deg, #dc3545, #e74c3c);
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
         }
+        
+        #resetButton:hover {
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.6);
+        }
+        
         .status {
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 5px;
+            margin: 20px auto;
+            padding: 15px 20px;
+            border-radius: 25px;
             text-align: center;
-            font-weight: bold;
+            font-weight: 600;
+            font-size: 16px;
+            max-width: 500px;
+            transition: all 0.3s ease;
+            animation: pulse 2s infinite;
         }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
         .status.ready {
-            background: #d4edda;
+            background: linear-gradient(45deg, #d4edda, #c3e6cb);
             color: #155724;
+            border: 2px solid #b5d7bb;
         }
+        
         .status.navigating {
-            background: #fff3cd;
+            background: linear-gradient(45deg, #fff3cd, #ffeaa7);
             color: #856404;
+            border: 2px solid #f4d03f;
         }
+        
         .status.completed {
-            background: #d1ecf1;
+            background: linear-gradient(45deg, #d1ecf1, #85c1e9);
             color: #0c5460;
+            border: 2px solid #7fb3d3;
+        }
+        
+        .instructions {
+            margin-top: 25px;
+            padding: 25px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 15px;
+            border-left: 5px solid #007bff;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .instructions h3 {
+            color: #495057;
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .instructions h3::before {
+            content: '🎮';
+            font-size: 1.2em;
+        }
+        
+        .instructions ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .instructions li {
+            padding: 8px 0;
+            padding-left: 30px;
+            position: relative;
+            font-size: 15px;
+            line-height: 1.5;
+            color: #495057;
+        }
+        
+        .instructions li::before {
+            position: absolute;
+            left: 0;
+            font-size: 1.2em;
+        }
+        
+        .instructions li:nth-child(1)::before { content: '🖱️'; }
+        .instructions li:nth-child(2)::before { content: '🎯'; }
+        .instructions li:nth-child(3)::before { content: '🚀'; }
+        .instructions li:nth-child(4)::before { content: '📡'; }
+        .instructions li:nth-child(5)::before { content: '📍'; }
+        
+        .legend {
+            margin-top: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, #fff, #f8f9fa);
+            border-radius: 15px;
+            border: 2px solid #dee2e6;
+        }
+        
+        .legend h4 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            text-align: center;
+        }
+        
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.7);
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid #333;
+        }
+        
+        .legend-color.water { background: #4a90e2; }
+        .legend-color.boat { background: #dc3545; }
+        .legend-color.obstacle { background: #666; }
+        .legend-color.target { background: #28a745; }
+        .legend-color.path { background: #ffc107; }
+        .legend-color.radar { background: transparent; border: 2px dashed #fff; }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                margin: 0;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            canvas {
+                max-width: 100%;
+                height: auto;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 200px;
+                margin: 5px 0;
+            }
+        }
+        
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 style="text-align: center; color: #333;">小船自主导航仿真</h1>
-        <canvas id="simulationCanvas" width="800" height="600"></canvas>
-        <div class="controls">
-            <button id="startButton">开始自主导航</button>
-            <button id="resetButton">重置仿真</button>
-            <button id="clearObstaclesButton">清除障碍物</button>
+        <div class="header">
+            <h1>🚢 小船自主导航仿真</h1>
+            <div class="subtitle">基于A*算法的智能路径规划与实时避障系统</div>
         </div>
-        <div id="status" class="status ready">就绪 - 请添加障碍物并设置终点</div>
-        <div class="instructions">
-            <h3>使用说明：</h3>
-            <ul>
-                <li><strong>添加障碍物：</strong>按住鼠标左键拖拽创建矩形障碍物</li>
-                <li><strong>设置终点：</strong>右键点击画布设置绿色终点标记</li>
-                <li><strong>开始导航：</strong>点击"开始自主导航"按钮启动小船</li>
-                <li><strong>激光雷达：</strong>白色圆圈表示检测范围（100像素）</li>
-                <li><strong>路径显示：</strong>黄色线条显示规划路径</li>
-            </ul>
+        
+        <div class="main-content">
+            <div class="canvas-container">
+                <canvas id="simulationCanvas" width="800" height="600"></canvas>
+            </div>
+            
+            <div class="controls">
+                <button id="startButton">🚀 开始自主导航</button>
+                <button id="resetButton">🔄 重置仿真</button>
+                <button id="clearObstaclesButton">🧹 清除障碍物</button>
+            </div>
+            
+            <div id="status" class="status ready">🎯 就绪 - 请添加障碍物并设置终点</div>
+            
+            <div class="instructions">
+                <h3>操作指南</h3>
+                <ul>
+                    <li><strong>添加障碍物：</strong>按住鼠标左键拖拽创建矩形障碍物</li>
+                    <li><strong>设置终点：</strong>右键点击画布设置绿色终点标记</li>
+                    <li><strong>开始导航：</strong>点击"开始自主导航"按钮启动小船</li>
+                    <li><strong>激光雷达：</strong>白色虚线圆圈表示检测范围（100像素）</li>
+                    <li><strong>路径显示：</strong>黄色线条显示AI规划的最优路径</li>
+                </ul>
+            </div>
+            
+            <div class="legend">
+                <h4>🎨 视觉元素说明</h4>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-color water"></div>
+                        <span>蓝色水面背景</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color boat"></div>
+                        <span>红色小船（显示方向）</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color obstacle"></div>
+                        <span>灰色障碍物</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color target"></div>
+                        <span>绿色目标点</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color path"></div>
+                        <span>黄色规划路径</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color radar"></div>
+                        <span>白色雷达检测范围</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -291,7 +615,24 @@
         // 状态更新
         function updateStatus(type, message) {
             statusElement.className = `status ${type}`;
-            statusElement.textContent = message;
+            
+            // 添加状态图标
+            let icon = '';
+            switch(type) {
+                case 'ready':
+                    icon = '🎯 ';
+                    break;
+                case 'navigating':
+                    icon = '⚡ ';
+                    break;
+                case 'completed':
+                    icon = '✅ ';
+                    break;
+                default:
+                    icon = '📍 ';
+            }
+            
+            statusElement.textContent = icon + message;
         }
 
         // 鼠标事件处理
@@ -308,7 +649,7 @@
             } else if (e.button === 2) { // 右键 - 设置终点
                 destination = {x: mouseX, y: mouseY};
                 boat.hasReachedDestination = false;
-                updateStatus('ready', '终点已设置 - 点击开始导航');
+                updateStatus('ready', '目标锁定 - 点击开始导航按钮启动AI导航');
                 e.preventDefault();
             }
         });
@@ -347,7 +688,7 @@
                     const obstX = width > 0 ? startX : startX + width;
                     const obstY = height > 0 ? startY : startY + height;
                     allObstacles.push(new Obstacle(obstX, obstY, obstWidth, obstHeight));
-                    updateStatus('ready', '障碍物已添加');
+                    updateStatus('ready', '障碍物已添加 - 右键设置目标点开始导航');
                 }
                 
                 dragPreview = null;
@@ -370,7 +711,7 @@
                 if (boat.path.length > 0) {
                     updateStatus('navigating', '正在导航 - 小船正在前往目标位置');
                 } else {
-                    updateStatus('ready', '无法到达目标 - 请检查路径是否被阻挡');
+                    updateStatus('ready', '路径受阻 - 请调整障碍物布局或重新设置目标');
                     boat.isNavigating = false;
                 }
             }
@@ -392,7 +733,7 @@
                 boat.path = [];
                 boat.gridPath = [];
             }
-            updateStatus('ready', '障碍物已清除');
+            updateStatus('ready', '环境已清理 - 可重新布置障碍物和目标');
         });
 
         // 动画循环
@@ -536,7 +877,7 @@
                         
                         if (boat.path.length === 0) {
                             boat.isNavigating = false;
-                            updateStatus('ready', '路径被阻挡 - 无法到达目标位置');
+                            updateStatus('ready', '智能重规划失败 - 目标位置暂时无法到达');
                         }
                     }
                 }
