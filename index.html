@@ -557,6 +557,10 @@
         let startX, startY;
         let dragPreview = null;
         const grid = new PF.Grid(numCols, numRows);
+        
+        // SVG船只数据
+        let boatSvg = null;
+        let boatImage = null;
 
         // 坐标转换函数
         function worldToGrid(x, y) {
@@ -610,6 +614,125 @@
             const worldPath = gridPath.map(p => gridToWorld(p[0], p[1]));
             
             return {gridPath, worldPath};
+        }
+
+        // 初始化SVG船只
+        function initBoatSvg() {
+            const svgString = `
+                <svg width="40" height="30" viewBox="0 0 40 30" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="hullGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:1" />
+                            <stop offset="50%" style="stop-color:#dc3545;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#b02a37;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="cabinGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+                            <stop offset="50%" style="stop-color:#f8f9fa;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#e9ecef;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="smokeStackGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#ffc107;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#fd7e14;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    <ellipse cx="20" cy="26" rx="18" ry="3" fill="#4a90e2" opacity="0.3"/>
+                    <path d="M 5 20 Q 20 25 35 20 L 32 18 Q 20 22 8 18 Z" fill="url(#hullGradient)" stroke="#721c24" stroke-width="1.5"/>
+                    <path d="M 8 18 L 32 18 L 35 12 L 5 12 Z" fill="url(#hullGradient)" stroke="#721c24" stroke-width="1.5"/>
+                    <path d="M 35 12 L 38 15 L 35 18 Z" fill="#ff8a80" stroke="#721c24" stroke-width="1"/>
+                    <rect x="12" y="8" width="16" height="4" rx="1" ry="1" fill="url(#cabinGradient)" stroke="#6c757d" stroke-width="1"/>
+                    <rect x="14" y="9" width="2" height="2" rx="0.5" fill="#87ceeb" stroke="#6c757d" stroke-width="0.5"/>
+                    <rect x="17" y="9" width="2" height="2" rx="0.5" fill="#87ceeb" stroke="#6c757d" stroke-width="0.5"/>
+                    <rect x="20" y="9" width="2" height="2" rx="0.5" fill="#87ceeb" stroke="#6c757d" stroke-width="0.5"/>
+                    <rect x="23" y="9" width="2" height="2" rx="0.5" fill="#87ceeb" stroke="#6c757d" stroke-width="0.5"/>
+                    <rect x="16" y="4" width="3" height="4" fill="url(#smokeStackGradient)" stroke="#dc3545" stroke-width="1"/>
+                    <ellipse cx="17.5" cy="4" rx="2" ry="0.8" fill="#fd7e14" stroke="#dc3545" stroke-width="0.8"/>
+                    <circle cx="17.5" cy="2" r="1" fill="#e9ecef" opacity="0.7"/>
+                    <circle cx="16" cy="1" r="0.8" fill="#dee2e6" opacity="0.5"/>
+                    <circle cx="19" cy="1.5" r="0.6" fill="#f8f9fa" opacity="0.6"/>
+                    <g transform="translate(10,14)">
+                        <path d="M 0 0 L 0 3 M -1 2 L 1 2 M -0.5 3 Q -0.5 3.5 0 3.5 Q 0.5 3.5 0.5 3" stroke="#6c757d" stroke-width="0.8" fill="none"/>
+                    </g>
+                    <path d="M 32 15 L 36 15" stroke="#ffc107" stroke-width="2" stroke-linecap="round"/>
+                    <text x="20" y="16" font-family="Arial, sans-serif" font-size="3" font-weight="bold" text-anchor="middle" fill="#ffffff" stroke="#000000" stroke-width="0.2">AI</text>
+                </svg>
+            `;
+            
+            const img = new Image();
+            const blob = new Blob([svgString], {type: 'image/svg+xml'});
+            const url = URL.createObjectURL(blob);
+            
+            img.onload = function() {
+                boatImage = img;
+                URL.revokeObjectURL(url);
+            };
+            
+            img.src = url;
+        }
+
+        // 绘制SVG船只
+        function drawBoat(ctx, x, y, angle, scale = 1) {
+            if (!boatImage) return;
+            
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.scale(scale, scale);
+            
+            // 绘制船只阴影
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#000000';
+            ctx.translate(2, 2);
+            ctx.drawImage(boatImage, -20, -15, 40, 30);
+            ctx.restore();
+            
+            // 绘制船只尾迹
+            if (boat.isNavigating) {
+                ctx.save();
+                ctx.globalAlpha = 0.4;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(-25, -5);
+                ctx.lineTo(-35, -8);
+                ctx.moveTo(-25, 5);
+                ctx.lineTo(-35, 8);
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            // 绘制船只主体
+            ctx.drawImage(boatImage, -20, -15, 40, 30);
+            
+            // 添加发光效果（当导航时）
+            if (boat.isNavigating) {
+                ctx.save();
+                ctx.globalAlpha = 0.6;
+                ctx.shadowColor = '#ffc107';
+                ctx.shadowBlur = 15;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                ctx.drawImage(boatImage, -20, -15, 40, 30);
+                ctx.restore();
+            }
+            
+            // 绘制速度指示器
+            if (boat.isNavigating) {
+                ctx.save();
+                const time = Date.now() * 0.01;
+                ctx.globalAlpha = 0.7 + 0.3 * Math.sin(time);
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(20, 0);
+                ctx.lineTo(25, 0);
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            ctx.restore();
         }
 
         // 状态更新
@@ -798,21 +921,26 @@
             }
 
             // 绘制小船
-            ctx.fillStyle = '#dc3545';
-            ctx.strokeStyle = '#721c24';
-            ctx.lineWidth = 2;
-            ctx.save();
-            ctx.translate(boat.x, boat.y);
-            ctx.rotate(boat.angle);
-            ctx.beginPath();
-            ctx.moveTo(15, 0);
-            ctx.lineTo(-10, 8);
-            ctx.lineTo(-5, 0);
-            ctx.lineTo(-10, -8);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
+            if (boatImage) {
+                drawBoat(ctx, boat.x, boat.y, boat.angle, 0.8);
+            } else {
+                // 降级方案：绘制简单三角形
+                ctx.fillStyle = '#dc3545';
+                ctx.strokeStyle = '#721c24';
+                ctx.lineWidth = 2;
+                ctx.save();
+                ctx.translate(boat.x, boat.y);
+                ctx.rotate(boat.angle);
+                ctx.beginPath();
+                ctx.moveTo(15, 0);
+                ctx.lineTo(-10, 8);
+                ctx.lineTo(-5, 0);
+                ctx.lineTo(-10, -8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
 
             // 绘制路径
             if (boat.path.length > 0) {
@@ -888,7 +1016,8 @@
             requestAnimationFrame(animate);
         }
 
-        // 启动动画
+        // 初始化SVG船只并启动动画
+        initBoatSvg();
         animate();
     </script>
 </body>
